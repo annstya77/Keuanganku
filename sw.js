@@ -1,7 +1,7 @@
 // Service worker: menyimpan tampilan aplikasi di HP agar terbuka cepat dan bisa dibuka tanpa internet.
 // Data keuangan TIDAK disimpan di sini; permintaan ke Apps Script selalu lewat jaringan.
 // Setiap kali kamu mengubah file di GitHub, naikkan angka versi di bawah (mm-v1 -> mm-v2) agar HP memuat versi baru.
-const V = 'mm-v2';
+const V = 'mm-v3';
 const SHELL = ['./', 'index.html', 'manifest.json', 'icon-192.png', 'icon-512.png', 'peanut.png', 'butter.png'];
 self.addEventListener('install', e => {
   e.waitUntil(caches.open(V).then(c => c.addAll(SHELL)).then(() => self.skipWaiting()));
