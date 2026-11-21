@@ -179,9 +179,19 @@ const HRF=['Minggu','Senin','Selasa','Rabu','Kamis','Jumat','Sabtu'];
 const fd=d=>{if(!d)return '-';const x=dt(d);return x.getDate()+' '+BLS[x.getMonth()]+' '+x.getFullYear()};
 const fdm=d=>{const x=dt(d);return x.getDate()+' '+BLS[x.getMonth()]};
 const PAL=['#F6C9D2','#BCD3EF','#CFE3B0','#F7E3A1','#E3D3F0','#F9D2B5','#BFE6DC','#E8C7E3','#D9D2B8','#B9C8E8'];
-const GRUPS=['Tunai','Rekening','E-wallet','Tabungan','Investasi','Kartu Debit','Kartu Kredit','Pinjaman','Lainnya'];
-const LIAB=['Kartu Kredit','Pinjaman'];
-const GICON={Tunai:'💵',Rekening:'🏦','E-wallet':'📱',Tabungan:'💰',Investasi:'📈','Kartu Debit':'💳','Kartu Kredit':'💳',Pinjaman:'🤝',Lainnya:'👛'};
+/* ---------- kelompok akun (bisa diatur sendiri; disimpan di Pengaturan) ---------- */
+const DEFG=[{n:'Tunai',i:'💵',j:'biasa'},{n:'Rekening',i:'🏦',j:'biasa'},{n:'E-wallet',i:'📱',j:'biasa'},{n:'Tabungan',i:'💰',j:'biasa'},{n:'Investasi',i:'📈',j:'biasa'},{n:'Kartu Debit',i:'💳',j:'debit'},{n:'Kartu Kredit',i:'💳',j:'kredit'},{n:'Pinjaman',i:'🤝',j:'utang'},{n:'Lainnya',i:'👛',j:'biasa'}];
+const JENIS=[['biasa','Biasa (uang yang kamu punya)'],['utang','Utang / pinjaman'],['kredit','Kartu kredit (ada tanggal tagihan)'],['debit','Kartu debit (terhubung ke akun lain)']];
+const jlab=j=>(JENIS.find(x=>x[0]==j)||JENIS[0])[1];
+function grups(){
+ const src=(D&&D.set&&Array.isArray(D.set.grups)&&D.set.grups.length)?D.set.grups:DEFG;
+ const L=src.map(x=>({n:String(x.n),i:x.i||'📁',j:x.j||'biasa'}));
+ if(D)D.akun.forEach(a=>{if(a.grup&&!L.some(x=>x.n==a.grup))L.push({n:a.grup,i:'👛',j:'biasa'})});
+ return L;
+}
+const gf=n=>grups().find(x=>x.n==n)||{n,i:'👛',j:'biasa'};
+const gj=n=>gf(n).j,gic=n=>gf(n).i;
+const LIABG=g=>{const j=gj(g);return j=='utang'||j=='kredit'};
 const FREQ=[['','Tidak berulang'],['d','Setiap hari'],['w','Setiap minggu'],['2w','Setiap 2 minggu'],['m','Setiap bulan'],['y','Setiap tahun']];
 
 const ls={get(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v));return true}catch(e){return false}}};
@@ -193,7 +203,7 @@ let D=null,_E=null;
 const N0=new Date();
 const S={tab:'trans',sub:'harian',y:N0.getFullYear(),m:N0.getMonth(),sel:'',wk:'',st:{p:'m',t:'out',v:'stat'},ad:'',ro:0,mo:'',off:0,inited:0,hid:0,as:'akun'};
 const KAT={in:{},out:{}};
-const isLiab=a=>LIAB.includes(a.grup);
+const isLiab=a=>LIABG(a.grup),isDebit=a=>gj(a.grup)=='debit',isKredit=a=>gj(a.grup)=='kredit';
 const acct=n=>(D&&D.akun.find(a=>a.nama==n))||null;
 const acol=n=>{const i=D?D.akun.findIndex(a=>a.nama==n):-1;const a=i>-1?D.akun[i]:null;return a?(a.warna||PAL[i%PAL.length]):'#D9D2B8'};
 const adot=n=>`<i class="adot" style="background:${acol(n)}"></i>`;
@@ -237,16 +247,16 @@ function bal(){
  D.akun.forEach(a=>A[a.nama]=+a.saldo||0);
  D.tx.forEach(t=>{A[t.akun]=(A[t.akun]||0)+(t.type=='in'?1:-1)*t.nilai});
  D.trf.forEach(t=>{A[t.dari]=(A[t.dari]||0)-(+t.nilai);A[t.ke]=(A[t.ke]||0)+(+t.nilai)});
- D.akun.forEach(a=>{if(a.grup=='Kartu Debit'&&a.link&&A[a.link]!==undefined)A[a.nama]=A[a.link]});
+ D.akun.forEach(a=>{if(isDebit(a)&&a.link&&A[a.link]!==undefined)A[a.nama]=A[a.link]});
  Object.keys(A).forEach(k=>A[k]=Math.round(A[k]*100)/100);
  return A;
 }
-function totals(A){let as=0,li=0;D.akun.forEach(a=>{if(a.grup=='Kartu Debit')return;const v=A[a.nama]||0;if(isLiab(a))li+=v;else as+=v});return {as,li:-li,tot:as+li}}
+function totals(A){let as=0,li=0;D.akun.forEach(a=>{if(isDebit(a))return;const v=A[a.nama]||0;if(isLiab(a))li+=v;else as+=v});return {as,li:-li,tot:as+li}}
 function balAt(end){
  const A={};D.akun.forEach(a=>A[a.nama]=+a.saldo||0);
  D.tx.forEach(t=>{if(t.date<=end)A[t.akun]=(A[t.akun]||0)+(t.type=='in'?1:-1)*t.nilai});
  D.trf.forEach(t=>{if(t.tanggal<=end){A[t.dari]=(A[t.dari]||0)-(+t.nilai);A[t.ke]=(A[t.ke]||0)+(+t.nilai)}});
- let tot=0;D.akun.forEach(a=>{if(a.grup!='Kartu Debit')tot+=A[a.nama]||0});
+ let tot=0;D.akun.forEach(a=>{if(!isDebit(a))tot+=A[a.nama]||0});
  return tot;
 }
 
@@ -332,7 +342,23 @@ const opts=(arr,sel)=>arr.map(([v,l])=>`<option value="${esc(v)}" ${v==sel?'sele
 const seg=items=>`<div class="seg" role="group">${items.map(([on,fn,l,c])=>`<button type="button" class="${c||''}" aria-pressed="${on}" onclick="${fn}">${l}</button>`).join('')}</div>`;
 
 /* ===== Tampilan ===== */
-const budOf=(k,s)=>{const r=D.ang.find(x=>x.kat==k&&(x.sub||'')==(s||''));return r?+r.nilai:0};
+/* anggaran per bulan: tiap bulan mengikuti pengaturan terbaru di bulan sebelumnya, kecuali diatur sendiri */
+const bkey=(y,m)=>y+'-'+pad(m+1),curBK=()=>bkey(S.y,S.m),bm_=b=>String(b||'').slice(0,7);
+const nextBK=bk=>{let y=+bk.slice(0,4),m=+bk.slice(5,7)+1;if(m>12){m=1;y++}return y+'-'+pad(m)};
+function budMap(bk){
+ const best={};
+ D.ang.forEach(x=>{const b=bm_(x.bulan);if(b>bk)return;const k=x.kat+'\u0001'+(x.sub||'');if(!best[k]||b>=best[k].b)best[k]={b,kat:x.kat,sub:x.sub||'',nilai:+x.nilai||0}});
+ return best;
+}
+const budOf=(k,s,bk)=>{const r=budMap(bk||curBK())[k+'\u0001'+(s||'')];return r?r.nilai:0};
+const budBefore=(k,s,bk)=>{let b=null;D.ang.forEach(x=>{if(x.kat==k&&(x.sub||'')==(s||'')){const z=bm_(x.bulan);if(z<bk&&(!b||z>=b.z))b={z,v:+x.nilai||0}}});return b?b.v:0};
+const budKeys=()=>S.st.p=='y'?Array.from({length:12},(_,j)=>bkey(S.y,j)):[curBK()];
+const budP=(k,s)=>sum(budKeys(),bk=>budOf(k,s,bk));
+function budRows(){
+ const m={};
+ budKeys().forEach(bk=>{const mp=budMap(bk);Object.keys(mp).forEach(k=>{const x=mp[k];if(x.nilai>0){m[k]=m[k]||{kat:x.kat,sub:x.sub,bud:0};m[k].bud+=x.nilai}})});
+ return Object.values(m);
+}
 const bar=(title,right='')=>`<header class="top"><div class="ttl"><img src="peanut.png" class="mas" alt=""><h1>${title}</h1></div><div class="tr">${right}<span id="sync" class="pill" onclick="flush()"></span></div></header>`;
 function go(t){S.tab=t;S.ad='';S.mo='';scrollTo(0,0);render()}
 function render(){
@@ -456,14 +482,14 @@ function catDetail(i){
  const ty=S.st.t,k=S.cl[i],r=srange(),all=entries().filter(e=>e.type==ty&&e.kat==k),l=all.filter(e=>inR(e,r)),tot=sum(l,e=>e.nilai);
  const sm={};l.forEach(e=>{const s=e.sub||'Tanpa sub-kategori';sm[s]=(sm[s]||0)+e.nilai});
  const mon=S.st.p=='m',mult=S.st.p=='y'?12:1;
- if(ty=='out'&&S.st.p!='w')D.ang.filter(b=>b.kat==k&&b.sub).forEach(b=>{if(!(b.sub in sm))sm[b.sub]=0});
+ if(ty=='out'&&S.st.p!='w')budRows().filter(b=>b.kat==k&&b.sub).forEach(b=>{if(!(b.sub in sm))sm[b.sub]=0});
  const subs=Object.entries(sm).sort((a,b)=>b[1]-a[1]);
  const mo=Array.from({length:12},(_,j)=>{const q=mrange(S.y,j);return sum(all.filter(e=>inR(e,q)),e=>e.nilai)}),M=Math.max(1,...mo);
  const bl=(sp,b)=>b>0?`<span class="mut ${sp>b?'over':''}">Anggaran ${rp(b)} · ${sp>b?'lebih '+rp(sp-b):'sisa '+rp(b-sp)}</span>`:'';
- const cb=ty=='out'&&S.st.p!='w'?budOf(k,'')*mult:0;
+ const cb=ty=='out'&&S.st.p!='w'?budP(k,''):0;
  const lab=S.st.p=='y'?'Tahun '+S.y:S.st.p=='w'?weekLbl():BLN[S.m]+' '+S.y;
  openS(()=>SHEAD(esc(k))+`<div class="sbody"><div class="mut">${lab} · ${rp(tot)}</div>
- ${subs.length?`<div class="card"><h3>Per sub-kategori</h3>${bl(tot,cb)}<div class="cats">${subs.map(([n,x],ix)=>{const ob=ty=='out'&&S.st.p!='w'&&n!='Tanpa sub-kategori'?budOf(k,n)*mult:0;return `<div class="cat"><div class="top2"><span>${esc(n)}</span><span><b>${rp(x)}</b> <small>${Math.round(x/(tot||1)*100)}%</small></span></div><div class="track"><i style="width:${x/(subs[0][1]||1)*100}%;background:${ob&&x>ob?'#D9667A':PAL[ix%PAL.length]}"></i></div>${bl(x,ob)}</div>`}).join('')}</div></div>`:''}
+ ${subs.length?`<div class="card"><h3>Per sub-kategori</h3>${bl(tot,cb)}<div class="cats">${subs.map(([n,x],ix)=>{const ob=ty=='out'&&S.st.p!='w'&&n!='Tanpa sub-kategori'?budP(k,n):0;return `<div class="cat"><div class="top2"><span>${esc(n)}</span><span><b>${rp(x)}</b> <small>${Math.round(x/(tot||1)*100)}%</small></span></div><div class="track"><i style="width:${x/(subs[0][1]||1)*100}%;background:${ob&&x>ob?'#D9667A':PAL[ix%PAL.length]}"></i></div>${bl(x,ob)}</div>`}).join('')}</div></div>`:''}
  <div class="card"><h3>Bulan demi bulan · ${S.y}</h3><div class="cbars">${mo.map((x,j)=>`<div class="cbar ${j==S.m&&mon?'cur':''}">${x?`<small>${short(x)}</small>`:''}<i style="height:${x?Math.max(3,x/M*80):0}px;background:${ty=='in'?'#9DB8E0':'#F0A9B8'}"></i><span>${BLS[j][0]}</span></div>`).join('')}</div></div>
  <div class="card"><h3>Transaksi</h3>${l.length?`<ul class="ents">${l.slice().sort((a,b)=>b.date.localeCompare(a.date)).map(e=>entRow(e)).join('')}</ul>`:'<div class="mut pad">Tidak ada transaksi.</div>'}</div></div>`);
 }
@@ -474,14 +500,14 @@ function noteDetail(i){
 
 /* ---------- anggaran ---------- */
 function budHtml(){
- const yr=S.st.p=='y',mult=yr?12:1,r=yr?yrange(S.y):mrange(S.y,S.m),L=entries().filter(e=>e.type=='out'&&inR(e,r)),tb=budOf('*','')*mult,O=sum(L,e=>e.nilai);
- const rows=D.ang.filter(b=>b.kat!='*'&&+b.nilai>0).map(b=>({kat:b.kat,sub:b.sub||'',bud:+b.nilai*mult,sp:sum(L.filter(e=>e.kat==b.kat&&(!b.sub||e.sub==b.sub)),e=>e.nilai)})).sort((a,b)=>b.sp/b.bud-a.sp/a.bud);
+ const yr=S.st.p=='y',mult=yr?12:1,r=yr?yrange(S.y):mrange(S.y,S.m),L=entries().filter(e=>e.type=='out'&&inR(e,r)),tb=budP('*',''),O=sum(L,e=>e.nilai),own=D.ang.some(x=>bm_(x.bulan)==curBK());
+ const rows=budRows().filter(b=>b.kat!='*').map(b=>({kat:b.kat,sub:b.sub||'',bud:b.bud,sp:sum(L.filter(e=>e.kat==b.kat&&(!b.sub||e.sub==b.sub)),e=>e.nilai)})).sort((a,b)=>b.sp/b.bud-a.sp/a.bud);
  const over=rows.filter(x=>x.sp>x.bud).length,esq=s=>esc(s).replace(/'/g,'&#39;');
- return `<div class="card"><div class="rowl"><b>Anggaran total ${yr?'tahunan':'bulanan'}</b><button type="button" class="btn sm" onclick="budTotalForm()">${tb?'Ubah':'Atur'}</button></div>
+ return `<div class="card"><div class="rowl"><b>Anggaran total ${yr?'tahunan':'· '+BLN[S.m]+' '+S.y}</b>${yr?'':`<button type="button" class="btn sm" onclick="budTotalForm()">${tb?'Ubah':'Atur'}</button>`}</div>
  ${tb?`<div class="rowl"><span>Terpakai ${rp(O)}</span><b>${rp(tb)}</b></div><div class="track"><i style="width:${Math.min(100,O/tb*100)}%${O>tb?';background:#D9667A':''}"></i></div><div class="mut ${O>tb?'over':''}">${O>tb?'Melebihi '+rp(O-tb):'Sisa '+rp(tb-O)}</div>`:'<div class="mut pad">Belum ada anggaran total.</div>'}</div>
  <div class="card"><div class="rowl"><b>Per kategori</b>${rows.length?`<span class="chip ${over?'bad':'good'}">${over?over+' melebihi':'Semua aman'}</span>`:''}</div>
- ${rows.length?`<div class="cats">${rows.map(x=>{const o=x.sp>x.bud;return `<button type="button" class="cat catb" onclick="budForm('${esq(x.kat)}')"><div class="top2"><span>${esc(x.kat)}${x.sub?' › '+esc(x.sub):''}</span><span><b>${rp(x.sp)}</b> <small>/ ${rp(x.bud)}</small></span></div><div class="track"><i style="width:${Math.min(100,x.sp/x.bud*100)}%;background:${o?'#D9667A':'#9DB8E0'}"></i></div><span class="mut ${o?'over':''}">${o?'Lebih '+rp(x.sp-x.bud):'Sisa '+rp(x.bud-x.sp)}</span></button>`}).join('')}</div>`:'<div class="mut pad">Belum ada anggaran per kategori.</div>'}
- <button type="button" class="btn g" onclick="budPick()">+ Atur anggaran kategori</button></div>${yr?'':''}<div class="mut pad">Anggaran berlaku sama setiap bulan. Tampilan tahunan memakai 12 kali anggaran bulanan.</div>`;
+ ${rows.length?`<div class="cats">${rows.map(x=>{const o=x.sp>x.bud;return `<button type="button" class="cat catb" ${yr?'':`onclick="budForm('${esq(x.kat)}')"`}><div class="top2"><span>${esc(x.kat)}${x.sub?' › '+esc(x.sub):''}</span><span><b>${rp(x.sp)}</b> <small>/ ${rp(x.bud)}</small></span></div><div class="track"><i style="width:${Math.min(100,x.sp/x.bud*100)}%;background:${o?'#D9667A':'#9DB8E0'}"></i></div><span class="mut ${o?'over':''}">${o?'Lebih '+rp(x.sp-x.bud):'Sisa '+rp(x.bud-x.sp)}</span></button>`}).join('')}</div>`:'<div class="mut pad">Belum ada anggaran per kategori.</div>'}
+ ${yr?'':`<button type="button" class="btn g" onclick="budPick()">+ Atur anggaran kategori</button>`}</div><div class="mut pad">${yr?'Tampilan tahunan = jumlah anggaran 12 bulan. Pilih tampilan Bulanan untuk mengubah anggaran.':(own?'Bulan ini punya anggaran yang diatur khusus.':'Bulan ini mengikuti anggaran bulan sebelumnya.')+' Setiap bulan baru otomatis memakai anggaran bulan sebelumnya; ubah kapan saja untuk bulan yang kamu pilih.'}</div>`;
 }
 
 /* ---------- tab Akun ---------- */
@@ -501,14 +527,15 @@ function akun(){
  h+=`<div class="sum"><div><span>Aset</span><b class="in">${rp(T.as)}</b></div><div><span>Utang</span><b class="out">${rp(T.li)}</b></div><div><span>Total</span><b>${rp(T.tot)}</b></div></div>`;
  h+=akunSeg();
  if(S.ro)h+='<div class="mut pad">Ketuk ▲ ▼ untuk mengubah urutan akun.</div>';
- GRUPS.forEach(g=>{
+ grups().forEach(gg=>{const g=gg.n;
   const L=D.akun.filter(a=>a.grup==g&&(S.hid||!+a.sembunyi));if(!L.length)return;
-  const gt=sum(L.filter(a=>g!='Kartu Debit'),a=>A[a.nama]||0);
-  h+=`<div class="card"><div class="rowl"><b>${GICON[g]} ${g}</b><b class="${gt<0?'out':''}">${g=='Kartu Debit'?'':rp(gt)}</b></div><ul class="ents">${L.map(a=>{
-   const v=A[a.nama]||0,info=a.grup=='Kartu Kredit'?`Tagihan tgl ${a.tagihan||'-'} · Jatuh tempo tgl ${a.tempo||'-'}`:a.grup=='Kartu Debit'?'Terhubung ke '+esc(a.link||'-'):(+a.sembunyi?'Tersembunyi':'');
-   return `<li class="ent" onclick="${S.ro?'':`S.ad='${a.id}';S.sel='';scrollTo(0,0);render()`}"><span class="eic" style="background:${acol(a.nama)}">${GICON[a.grup]||'👛'}</span><div class="ewhat"><b>${esc(a.nama)}</b>${info?`<span>${info}</span>`:''}</div>${S.ro?mvb(a.id):`<span class="eamt ${v<0?'out':''}">${rp(v)}</span>`}</li>`}).join('')}</ul></div>`;
+  const gt=sum(L.filter(a=>gg.j!='debit'),a=>A[a.nama]||0);
+  h+=`<div class="card"><div class="rowl"><b>${esc(gg.i)} ${esc(g)}</b><b class="${gt<0?'out':''}">${gg.j=='debit'?'':rp(gt)}</b></div><ul class="ents">${L.map(a=>{
+   const v=A[a.nama]||0,info=isKredit(a)?`Tagihan tgl ${a.tagihan||'-'} · Jatuh tempo tgl ${a.tempo||'-'}`:isDebit(a)?'Terhubung ke '+esc(a.link||'-'):(+a.sembunyi?'Tersembunyi':'');
+   return `<li class="ent" onclick="${S.ro?'':`S.ad='${a.id}';S.sel='';scrollTo(0,0);render()`}"><span class="eic" style="background:${acol(a.nama)}">${esc(gic(a.grup))}</span><div class="ewhat"><b>${esc(a.nama)}</b>${info?`<span>${info}</span>`:''}</div>${S.ro?mvb(a.id):`<span class="eamt ${v<0?'out':''}">${rp(v)}</span>`}</li>`}).join('')}</ul></div>`;
  });
  if(!D.akun.length)h+=empty('Belum ada akun','Ketuk ＋ untuk menambah akun.');
+ h+=`<button type="button" class="btn g" onclick="S.tab='more';S.mo='grup';scrollTo(0,0);render()">⚙️ Atur kelompok akun</button>`;
  h+=gerakHtml();
  if(D.akun.some(a=>+a.sembunyi))h+=`<button type="button" class="btn g" onclick="S.hid=!S.hid;render()">${S.hid?'Sembunyikan':'Tampilkan'} akun tersembunyi</button>`;
  return h;
@@ -521,13 +548,14 @@ function gerakHtml(){
  const svg=ms.length?`<svg viewBox="0 0 ${W} ${H+30}" width="100%" role="img" aria-label="Total aset per bulan">${ms.map((x,i)=>{const hh=Math.abs(x.tot)/M*H,y=H+12-hh;return `<rect x="${i*bw+bw*.14}" y="${y}" width="${bw*.72}" height="${hh}" rx="3" fill="${x.tot<0?'#F0A9B8':'#BCD3EF'}"/><text x="${i*bw+bw/2}" y="${Math.max(8,y-3)}" font-size="7.5" text-anchor="middle" fill="#26354F">${short(x.tot)}</text><text x="${i*bw+bw/2}" y="${H+25}" font-size="8.5" text-anchor="middle" fill="#7D7564">${BLS[x.m]}</text>`}).join('')}</svg>`:'<div class="mut pad">Belum ada data.</div>';
  return `<div class="card"><div class="rowl"><b>Pergerakan total aset</b><span class="row g6"><button type="button" class="chip" onclick="S.gy--;render()">‹</button><b>${S.gy}</b><button type="button" class="chip" onclick="S.gy++;render()" ${S.gy>=N0.getFullYear()?'disabled':''}>›</button></span></div>${svg}</div>`;
 }
+function goalLink(a,v){const g=D.goal.find(x=>x.akun==a.nama);if(!g)return '';const p=Math.max(0,Math.min(100,v/(+g.target)*100));return `<div class="mut">🎯 Target “${esc(g.nama)}” · ${Math.round(p)}% dari ${rp(+g.target)}</div>`}
 function akunDetail(){
  const a=D.akun.find(x=>x.id==S.ad);if(!a){S.ad='';return akun()}
  const A=bal(),r=mrange(S.y,S.m),L=entries().filter(e=>inR(e,r)&&(e.akun==a.nama||e.ke==a.nama)),v=A[a.nama]||0;
  const masuk=sum(L.filter(e=>e.type=='in'||(e.type=='trf'&&e.ke==a.nama)),e=>e.nilai),keluar=sum(L.filter(e=>e.type=='out'||(e.type=='trf'&&e.akun==a.nama)),e=>e.nilai);
- const kk=a.grup=='Kartu Kredit'?`<div class="rowl"><span>Tanggal tagihan</span><b>${a.tagihan||'-'}</b></div><div class="rowl"><span>Jatuh tempo</span><b>${a.tempo||'-'}</b></div>${v<0?`<button type="button" class="btn" onclick="openForm('trf',null,'',{ke:'${esc(a.nama).replace(/'/g,'&#39;')}',nilai:${Math.abs(v)}})">Bayar tagihan ${rp(Math.abs(v))}</button>`:''}`:'';
+ const kk=isKredit(a)?`<div class="rowl"><span>Tanggal tagihan</span><b>${a.tagihan||'-'}</b></div><div class="rowl"><span>Jatuh tempo</span><b>${a.tempo||'-'}</b></div>${v<0?`<button type="button" class="btn" onclick="openForm('trf',null,'',{ke:'${esc(a.nama).replace(/'/g,'&#39;')}',nilai:${Math.abs(v)}})">Bayar tagihan ${rp(Math.abs(v))}</button>`:''}`:'';
  return `<div class="rowl pad"><button type="button" class="lk" onclick="S.ad='';render()">‹ Semua akun</button><span class="row g6"><button type="button" class="chip" onclick="openForm('trf',null,'',{akun:'${esc(a.nama).replace(/'/g,'&#39;')}'})">⇄ Transfer</button><button type="button" class="chip" onclick="akunForm('${a.id}')">Ubah</button></span></div>
- <div class="card hero"><div class="mut">${GICON[a.grup]||''} ${esc(a.grup)}</div><h2>${adot(a.nama)}${esc(a.nama)}</h2><div class="big ${v<0?'out':''}">${rp(v)}</div>${a.catatan?`<div class="mut">${esc(a.catatan)}</div>`:''}${kk}</div>`+
+ <div class="card hero"><div class="mut">${esc(gic(a.grup))} ${esc(a.grup)}</div><h2>${adot(a.nama)}${esc(a.nama)}</h2><div class="big ${v<0?'out':''}">${rp(v)}</div>${a.catatan?`<div class="mut">${esc(a.catatan)}</div>`:''}${goalLink(a,v)}${kk}</div>`+
  mnavHtml(false)+`<div class="sum"><div><span>Masuk</span><b class="in">${rp(masuk)}</b></div><div><span>Keluar</span><b class="out">${rp(keluar)}</b></div><div><span>Selisih</span><b>${rp(masuk-keluar)}</b></div></div><div class="body">${dayGroups(L,a.nama)}</div>`;
 }
 
@@ -536,11 +564,12 @@ function more(){
  const back='<button type="button" class="lk pad" onclick="S.mo=\'\';render()">‹ Menu lainnya</button>';
  if(S.mo=='bm')return bar('Favorit')+back+bmPage();
  if(S.mo=='kat')return bar('Kategori')+back+katPage();
+ if(S.mo=='grup')return bar('Kelompok akun')+back+grupPage();
  if(S.mo=='rep')return bar('Transaksi berulang')+back+repPage();
  if(S.mo=='bk')return bar('Cadangan')+back+bkPage();
  if(S.mo=='set')return bar('Pengaturan')+back+setPage();
  if(S.mo=='conn')return bar('Sambungan')+back+connPage();
- const rows=[['bm','★','Favorit','Template transaksi untuk input cepat'],['kat','🗂️','Kategori','Tambah, ubah, hapus kategori dan sub-kategori'],['rep','🔁','Transaksi berulang','Gaji, cicilan, langganan'],['ang','🎯','Anggaran','Batas pengeluaran per kategori'],['exp','📤','Ekspor CSV','Unduh semua transaksi'],['bk','💾','Cadangan & pemulihan','Salin ke Drive, unduh, atau pulihkan'],['set','⚙️','Pengaturan','Tanggal mulai bulan, layar awal, kunci PIN'],['conn','🔗','Sambungan','Alamat Web App dan kunci rahasia']];
+ const rows=[['bm','★','Favorit','Template transaksi untuk input cepat'],['kat','🗂️','Kategori','Tambah, ubah, hapus kategori dan sub-kategori'],['grup','🧩','Kelompok akun','Tambah, ubah nama, urutkan, hapus kelompok'],['rep','🔁','Transaksi berulang','Gaji, cicilan, langganan'],['ang','🎯','Anggaran','Batas pengeluaran per kategori'],['exp','📤','Ekspor CSV','Unduh semua transaksi'],['bk','💾','Cadangan & pemulihan','Salin ke Drive, unduh, atau pulihkan'],['set','⚙️','Pengaturan','Tanggal mulai bulan, layar awal, kunci PIN'],['conn','🔗','Sambungan','Alamat Web App dan kunci rahasia']];
  return bar('Lainnya')+`<div class="card"><ul class="ents">${rows.map(([k,i,t,s])=>`<li class="ent" onclick="moreGo('${k}')"><span class="eic">${i}</span><div class="ewhat"><b>${t.replace('&','&amp;')}</b><span>${s}</span></div><span class="chev">›</span></li>`).join('')}</ul></div>
  <div class="about"><img src="butter.png" alt=""><span>Pengelola Keuangan · data tersimpan di Google Sheets-mu</span></div>`;
 }
@@ -612,7 +641,7 @@ const swatches=(k)=>F('Warna',`<div class="chips">${PAL.map(c=>`<button type="bu
 /* ---------- form transaksi ---------- */
 function openForm(type,e,date,pre){
  const last=ls.get('lastAkun','');
- const a0=(D.akun.find(a=>a.nama==last&&!+a.sembunyi)||D.akun.find(a=>!+a.sembunyi&&a.grup!='Kartu Debit')||D.akun[0]||{}).nama||'';
+ const a0=(D.akun.find(a=>a.nama==last&&!+a.sembunyi)||D.akun.find(a=>!+a.sembunyi&&!isDebit(a))||D.akun[0]||{}).nama||'';
  S.f={type,orig:null,date:date||TODAY(),expr:'',kat:'',sub:'',akun:a0,ke:'',cat:'',tag:'',fee:0,freq:'',jumlah:'',repId:'',repLast:'',goal:''};
  if(pre){Object.assign(S.f,pre);if(pre.nilai)S.f.expr=String(pre.nilai)}
  if(e)Object.assign(S.f,e);
@@ -673,7 +702,7 @@ function fsave(cont){
  if(tr){if(!f.akun||!f.ke)return toast('Pilih akun asal dan tujuan',0);if(f.akun==f.ke)return toast('Akun asal dan tujuan tidak boleh sama',0)}
  else{if(!f.kat)return toast('Pilih kategori dulu',0);if(!f.akun)return toast('Pilih akun',0)}
  let akun=f.akun;const a=acct(akun);
- if(!tr&&a&&a.grup=='Kartu Debit'&&a.link)akun=a.link;
+ if(!tr&&a&&isDebit(a)&&a.link)akun=a.link;
  if(f.freq||f.repId){
   op('upsert',['Berulang',{id:f.repId||uid(),type:f.type,akun:f.akun,ke:tr?f.ke:'',kat:tr?'':f.kat,sub:tr?'':f.sub,nilai:v,cat:f.cat,tag:f.tag,freq:f.freq||'m',mulai:f.date,jumlah:+f.jumlah||0,terakhir:f.repLast||''}]);
   toast('Jadwal berulang tersimpan');
@@ -720,7 +749,7 @@ function setSub(j){const f=S.f,c=KAT[f.type][f.kat];f.sub=j<0?'':c.subs[j];close
 function pickAkun(field){
  const f=S.f,L=D.akun.filter(a=>!+a.sembunyi||a.nama==f[field]),A=bal();
  S.pa=L.map(a=>a.nama);
- openP(()=>PKH(field=='ke'?'Akun tujuan':field=='akun'&&f.type=='trf'?'Akun asal':'Akun')+`<div class="pkb"><ul class="ents">${L.map((a,i)=>`<li class="ent" onclick="setAkun('${field}',${i})"><span class="eic" style="background:${acol(a.nama)}">${GICON[a.grup]||'👛'}</span><div class="ewhat"><b>${esc(a.nama)}</b><span>${esc(a.grup)}</span></div><span class="eamt ${(A[a.nama]||0)<0?'out':''}">${rp(A[a.nama]||0)}</span></li>`).join('')}</ul></div>`);
+ openP(()=>PKH(field=='ke'?'Akun tujuan':field=='akun'&&f.type=='trf'?'Akun asal':'Akun')+`<div class="pkb"><ul class="ents">${L.map((a,i)=>`<li class="ent" onclick="setAkun('${field}',${i})"><span class="eic" style="background:${acol(a.nama)}">${esc(gic(a.grup))}</span><div class="ewhat"><b>${esc(a.nama)}</b><span>${esc(a.grup)}</span></div><span class="eamt ${(A[a.nama]||0)<0?'out':''}">${rp(A[a.nama]||0)}</span></li>`).join('')}</ul></div>`);
 }
 function setAkun(field,i){S.f[field]=S.pa[i];closeP();sh()}
 function pickRepeat(){
@@ -764,32 +793,32 @@ function repEdit(id){
 function akunForm(id){
  const a=D.akun.find(x=>x.id==id),A=bal();
  if(a){const v=A[a.nama]||0;S.f={id,nama:a.nama,grup:a.grup,saldo:isLiab(a)?Math.max(0,-v):v,now:v,warna:a.warna||'',catatan:a.catatan||'',tagihan:+a.tagihan||0,tempo:+a.tempo||0,link:a.link||'',sembunyi:+a.sembunyi||0}}
- else S.f={id:'',nama:'',grup:'Rekening',saldo:0,warna:PAL[D.akun.length%PAL.length],catatan:'',tagihan:0,tempo:0,link:'',sembunyi:0};
+ else S.f={id:'',nama:'',grup:(grups().find(g=>g.n=='Rekening')||grups()[0]).n,saldo:0,warna:PAL[D.akun.length%PAL.length],catatan:'',tagihan:0,tempo:0,link:'',sembunyi:0};
  openS(aSheet);
 }
 const dayOpts=sel=>opts([['0','—'],...Array.from({length:31},(_,i)=>[String(i+1),String(i+1)])],String(sel||0));
-const aSheet=()=>{const f=S.f,liab=LIAB.includes(f.grup);
+const aSheet=()=>{const f=S.f,liab=LIABG(f.grup);
  return form(f.id?'Ubah akun':'Akun baru',
- inp('nama','Nama akun','Misal: BCA')+sel('grup','Kelompok',opts(GRUPS.map(g=>[g,g]),f.grup),1)+
- (f.grup=='Kartu Debit'?F('Terhubung ke akun',`<select onchange="S.f.link=this.value">${opts([['','— pilih —'],...D.akun.filter(a=>a.id!=f.id&&a.grup!='Kartu Debit'&&!LIAB.includes(a.grup)).map(a=>[a.nama,a.nama])],f.link)}</select><div class="mut">Transaksi dengan kartu debit otomatis memotong saldo akun ini.</div>`):mon('saldo',(f.id?(liab?'Sisa utang saat ini':'Saldo saat ini'):(liab?'Utang awal':'Saldo awal'))))+
- (f.grup=='Kartu Kredit'?`<div class="row2">${F('Tanggal tagihan',`<select onchange="S.f.tagihan=+this.value">${dayOpts(f.tagihan)}</select>`)}${F('Jatuh tempo',`<select onchange="S.f.tempo=+this.value">${dayOpts(f.tempo)}</select>`)}</div>`:'')+
+ inp('nama','Nama akun','Misal: BCA')+sel('grup','Kelompok',opts(grups().map(g=>[g.n,g.n]),f.grup),1)+'<div class="mut">Tambah atau ubah kelompok di Lainnya › Kelompok akun.</div>'+
+ (gj(f.grup)=='debit'?F('Terhubung ke akun',`<select onchange="S.f.link=this.value">${opts([['','— pilih —'],...D.akun.filter(a=>a.id!=f.id&&!isDebit(a)&&!isLiab(a)).map(a=>[a.nama,a.nama])],f.link)}</select><div class="mut">Transaksi dengan kartu debit otomatis memotong saldo akun ini.</div>`):mon('saldo',(f.id?(liab?'Sisa utang saat ini':'Saldo saat ini'):(liab?'Utang awal':'Saldo awal'))))+
+ (gj(f.grup)=='kredit'?`<div class="row2">${F('Tanggal tagihan',`<select onchange="S.f.tagihan=+this.value">${dayOpts(f.tagihan)}</select>`)}${F('Jatuh tempo',`<select onchange="S.f.tempo=+this.value">${dayOpts(f.tempo)}</select>`)}</div>`:'')+
  swatches('warna')+inp('catatan','Catatan','Opsional')+
  F('Tampil di daftar',`<select onchange="S.f.sembunyi=+this.value">${opts([['0','Tampilkan'],['1','Sembunyikan']],String(f.sembunyi))}</select>`)+
  (f.id?'<div class="mut">Kalau saldo diubah, selisihnya dicatat otomatis sebagai transaksi kategori “Adjust”.</div>':'')+
  btns('asave()',f.id&&'adel()'))};
 function asave(){
- const f=S.f,n=f.nama.trim(),liab=LIAB.includes(f.grup);
+ const f=S.f,n=f.nama.trim(),liab=LIABG(f.grup);
  if(!n)return toast('Nama akun wajib diisi',0);
  if(D.akun.some(a=>a.id!=f.id&&a.nama.toLowerCase()==n.toLowerCase()))return toast('Nama akun sudah ada',0);
- if(f.grup=='Kartu Debit'&&!f.link)return toast('Pilih akun yang terhubung dengan kartu debit',0);
- const base={nama:n,grup:f.grup,warna:f.warna,catatan:f.catatan,sembunyi:f.sembunyi,tagihan:f.grup=='Kartu Kredit'?f.tagihan:0,tempo:f.grup=='Kartu Kredit'?f.tempo:0,link:f.grup=='Kartu Debit'?f.link:''};
+ if(gj(f.grup)=='debit'&&!f.link)return toast('Pilih akun yang terhubung dengan kartu debit',0);
+ const base={nama:n,grup:f.grup,warna:f.warna,catatan:f.catatan,sembunyi:f.sembunyi,tagihan:gj(f.grup)=='kredit'?f.tagihan:0,tempo:gj(f.grup)=='kredit'?f.tempo:0,link:gj(f.grup)=='debit'?f.link:''};
  if(f.id){
   op('saveAkun',[{id:f.id,...base}]);
-  if(f.grup!='Kartu Debit'){
+  if(gj(f.grup)!='debit'){
    const target=liab?-f.saldo:f.saldo,d=Math.round((target-f.now)*100)/100;
    if(d)op('saveTx',[{id:uid(),type:d>0?'in':'out',date:TODAY(),akun:n,kat:'Adjust',sub:'',nilai:Math.abs(d),cat:'Penyesuaian saldo',tag:''}]);
   }
- }else op('saveAkun',[{id:uid(),...base,saldo:f.grup=='Kartu Debit'?0:(liab?-f.saldo:f.saldo),urut:D.akun.length+1}]);
+ }else op('saveAkun',[{id:uid(),...base,saldo:gj(f.grup)=='debit'?0:(liab?-f.saldo:f.saldo),urut:D.akun.length+1}]);
  closeS();toast('Akun tersimpan');
 }
 async function adel(){
@@ -797,6 +826,43 @@ async function adel(){
  const pakai=D.tx.filter(t=>t.akun==a.nama).length+D.trf.filter(t=>t.dari==a.nama||t.ke==a.nama).length;
  if(pakai)return toast('Akun dipakai '+pakai+' transaksi. Sembunyikan saja, atau hapus transaksinya dulu.',0);
  if(await ask('Hapus akun “'+a.nama+'”?','Akun yang belum punya transaksi akan dihapus.')){op('remove',['Akun',f.id]);closeS();S.ad='';render();toast('Akun dihapus')}
+}
+
+/* ---------- kelompok akun: halaman & form ---------- */
+const saveGrups=L=>op('saveSettings',[{grups:L}]);
+function grupPage(){
+ const L=grups();
+ return `<div class="card"><ul class="ents">${L.map((g,i)=>{const n=D.akun.filter(a=>a.grup==g.n).length;return `<li class="ent" onclick="grupForm(${i})"><span class="eic">${esc(g.i)}</span><div class="ewhat"><b>${esc(g.n)}</b><span>${n} akun · ${esc(jlab(g.j))}</span></div><span class="row g6"><button type="button" class="chip" onclick="event.stopPropagation();mvGrup(${i},-1)" aria-label="Naik">▲</button><button type="button" class="chip" onclick="event.stopPropagation();mvGrup(${i},1)" aria-label="Turun">▼</button></span></li>`}).join('')}</ul></div><button type="button" class="btn" onclick="grupForm(-1)">+ Kelompok baru</button><div class="mut pad">Urutan di sini = urutan kelompok di tab Akun. Ketuk kelompok untuk mengubah nama, ikon, atau menghapusnya.</div>`;
+}
+function mvGrup(i,d){const L=grups(),j=i+d;if(j<0||j>=L.length)return;[L[i],L[j]]=[L[j],L[i]];saveGrups(L)}
+function grupForm(i){
+ const g=i>=0?grups()[i]:null;
+ S.f=g?{i,n:g.n,ic:g.i,j:g.j}:{i:-1,n:'',ic:'📁',j:'biasa'};
+ openS(gSheet);
+}
+const gSheet=()=>{const f=S.f;return form(f.i>=0?'Ubah kelompok':'Kelompok baru',
+ `<div class="row2">${inp('ic','Ikon (emoji)','📁','maxlength="4"')}${inp('n','Nama kelompok','Misal: Dana darurat')}</div>`+
+ sel('j','Jenis',opts(JENIS,f.j))+
+ '<div class="mut">Jenis menentukan cara menghitung: “Utang” dan “Kartu kredit” dihitung sebagai kewajiban, “Kartu debit” mengikuti saldo akun yang dihubungkan.</div>'+
+ (f.i>=0?'<div class="mut">Mengganti nama otomatis ikut mengubah semua akun di kelompok ini.</div>':'')+btns('gsave()',f.i>=0&&'gdel()'))};
+function gsave(){
+ const f=S.f,n=f.n.trim(),L=grups().map(x=>({...x})),cls=j=>j=='debit'?'d':(j=='utang'||j=='kredit')?'l':'a';
+ if(!n)return toast('Nama kelompok wajib diisi',0);
+ if(L.some((g,i)=>i!=f.i&&g.n.toLowerCase()==n.toLowerCase()))return toast('Nama kelompok sudah ada',0);
+ const nw={n,i:(f.ic||'').trim()||'📁',j:f.j};
+ if(f.i>=0){
+  const old=L[f.i],ids=D.akun.filter(a=>a.grup==old.n).map(a=>a.id);
+  if(ids.length&&cls(old.j)!=cls(nw.j))return toast('Kelompok masih berisi '+ids.length+' akun. Pindahkan akunnya dulu sebelum mengubah jenis ke/dari utang atau kartu debit.',0);
+  L[f.i]=nw;saveGrups(L);
+  if(old.n!=n)ids.forEach(id=>op('saveAkun',[{id,grup:n}]));
+ }else{L.push(nw);saveGrups(L)}
+ closeS();toast('Kelompok tersimpan');
+}
+async function gdel(){
+ const f=S.f,L=grups(),g=L[f.i],cnt=D.akun.filter(a=>a.grup==g.n).length;
+ if(cnt)return toast('Kelompok masih berisi '+cnt+' akun. Pindahkan akunnya ke kelompok lain dulu.',0);
+ if(L.length<=1)return toast('Minimal harus ada satu kelompok',0);
+ if(await ask('Hapus kelompok “'+g.n+'”?','Kelompok ini belum berisi akun.')){L.splice(f.i,1);saveGrups(L);closeS();toast('Kelompok dihapus')}
 }
 
 /* ---------- kategori ---------- */
@@ -824,12 +890,18 @@ async function kdel(){
 }
 
 /* ---------- anggaran ---------- */
-function setBud(kat,sub,v){
- const ex=D.ang.find(x=>x.kat==kat&&(x.sub||'')==(sub||''));
- if(v>0)op('upsert',['Anggaran',{id:ex?ex.id:uid(),kat,sub:sub||'',nilai:v}]);
- else if(ex)op('remove',['Anggaran',ex.id]);
+function setBud(kat,sub,v,bk,only){
+ bk=bk||curBK();sub=sub||'';v=+v||0;
+ const nx=nextBK(bk),oldNext=budOf(kat,sub,nx);
+ const ex=D.ang.find(x=>x.kat==kat&&(x.sub||'')==sub&&bm_(x.bulan)==bk);
+ if(v==budBefore(kat,sub,bk)){if(ex)op('remove',['Anggaran',ex.id])}
+ else op('upsert',['Anggaran',{id:ex?ex.id:uid(),kat,sub,bulan:bk,nilai:v}]);
+ if(only&&budOf(kat,sub,nx)!=oldNext)setBud(kat,sub,oldNext,nx,false); // "bulan ini saja": bulan depan tetap seperti semula
 }
-function budTotalForm(){S.f={v:budOf('*','')};openS(()=>form('Anggaran total bulanan',mon('v','Batas pengeluaran per bulan')+'<div class="mut">Kosongkan atau isi 0 untuk menghapus.</div>'+btns("setBud('*','',S.f.v||0);closeS();toast('Anggaran tersimpan')")))}
+const SCOPE=[['all','Bulan ini dan seterusnya'],['one','Bulan ini saja']];
+const scopeF=()=>F('Berlaku untuk',`<select onchange="S.f.sc=this.value">${opts(SCOPE,S.f.sc)}</select><div class="mut">“Bulan ini dan seterusnya” = bulan-bulan berikutnya ikut berubah, kecuali yang sudah diatur sendiri.</div>`);
+function budTotalForm(){S.f={v:budOf('*',''),sc:'all'};openS(()=>form('Anggaran total · '+BLN[S.m]+' '+S.y,mon('v','Batas pengeluaran bulan ini')+scopeF()+'<div class="mut">Isi 0 untuk meniadakan anggaran.</div>'+btns("budTotalSave()")))}
+function budTotalSave(){setBud('*','',S.f.v||0,curBK(),S.f.sc=='one');closeS();toast('Anggaran tersimpan')}
 function budPick(){
  const cats=Object.keys(KAT.out).filter(n=>n!='Adjust');S.pc=cats;
  openS(()=>SHEAD('Pilih kategori')+`<div class="sbody"><div class="card"><ul class="ents">${cats.map((n,i)=>`<li class="ent" onclick="budFormI(${i})"><span class="eic">${esc(KAT.out[n].ikon)}</span><div class="ewhat"><b>${esc(n)}</b><span>${budOf(n,'')?'Anggaran '+rp(budOf(n,'')):'Belum ada anggaran'}</span></div><span class="chev">›</span></li>`).join('')}</ul></div></div>`);
@@ -837,10 +909,10 @@ function budPick(){
 const budFormI=i=>budForm(S.pc[i]);
 function budForm(kat){
  const c=KAT.out[kat]||{subs:[]};
- S.f={kat,v:budOf(kat,''),subs:c.subs.map(n=>({n,v:budOf(kat,n)}))};
- openS(()=>form('Anggaran '+esc(kat),mon('v','Anggaran bulanan kategori')+(S.f.subs.length?F('Per sub-kategori (opsional)',S.f.subs.map((s,i)=>`<div class="fld"><label class="lb">${esc(s.n)}</label><div class="amtbox"><span>Rp</span><input inputmode="numeric" placeholder="0" value="${s.v?fmt(s.v):''}" oninput="const d=this.value.replace(/\\D/g,'');S.f.subs[${i}].v=+d;this.value=d?fmt(+d):''"></div></div>`).join('')):'')+'<div class="mut">Anggaran kategori dan sub-kategori dihitung terpisah. Isi 0 untuk menghapus.</div>'+btns('budSave()')));
+ S.f={kat,sc:'all',v:budOf(kat,''),subs:c.subs.map(n=>({n,v:budOf(kat,n)}))};
+ openS(()=>form('Anggaran '+esc(kat)+' · '+BLN[S.m]+' '+S.y,mon('v','Anggaran kategori bulan ini')+(S.f.subs.length?F('Per sub-kategori (opsional)',S.f.subs.map((s,i)=>`<div class="fld"><label class="lb">${esc(s.n)}</label><div class="amtbox"><span>Rp</span><input inputmode="numeric" placeholder="0" value="${s.v?fmt(s.v):''}" oninput="const d=this.value.replace(/\\D/g,'');S.f.subs[${i}].v=+d;this.value=d?fmt(+d):''"></div></div>`).join('')):'')+scopeF()+'<div class="mut">Anggaran kategori dan sub-kategori dihitung terpisah. Isi 0 untuk meniadakan.</div>'+btns('budSave()')));
 }
-function budSave(){const f=S.f;setBud(f.kat,'',f.v||0);f.subs.forEach(s=>setBud(f.kat,s.n,s.v||0));closeS();toast('Anggaran tersimpan')}
+function budSave(){const f=S.f,bk=curBK(),one=f.sc=='one';setBud(f.kat,'',f.v||0,bk,one);f.subs.forEach(s=>setBud(f.kat,s.n,s.v||0,bk,one));closeS();toast('Anggaran tersimpan')}
 
 /* ---------- catatan harian ---------- */
 function memoForm(id){
@@ -867,7 +939,7 @@ function qHtml(){
 const qList=()=>{const el=$('#ql');if(el)el.innerHTML=qHtml()};
 
 /* ===== Tabungan (goals) ===== */
-const goalSaved=g=>{const L=D.trf.filter(t=>t.goal==g.id);return sum(L.filter(t=>t.ke==g.akun),t=>+t.nilai)-sum(L.filter(t=>t.dari==g.akun),t=>+t.nilai)};
+const goalSaved=g=>bal()[g.akun]||0; // uang terkumpul = saldo akun yang dihubungkan
 function goalNeed(g,saved){
  const rest=(+g.target)-saved;
  if(rest<=0)return 'Target tercapai 🎉';
@@ -879,28 +951,30 @@ function goalNeed(g,saved){
 }
 const JAR='<svg viewBox="0 0 64 72" class="jar" aria-hidden="true"><rect x="14" y="6" width="36" height="10" rx="4" fill="#9CC3F0"/><path d="M12 18h40v6c4 4 6 9 6 16v14c0 8-6 14-14 14H20c-8 0-14-6-14-14V40c0-7 2-12 6-16z" fill="#E6F1FD" stroke="#A9CBF2" stroke-width="2"/><path d="M26 22l6 5 6-5" fill="none" stroke="#F4A3B5" stroke-width="3" stroke-linecap="round"/><path d="M32 36l3.2 6.5 7.1 1-5.2 5 1.3 7.1L32 52.2l-6.4 3.4 1.3-7.1-5.2-5 7.1-1z" fill="#FBD866" stroke="#F2B93B" stroke-width="1.5" stroke-linejoin="round"/></svg>';
 function goalHtml(){
- const G=D.goal,T=sum(G,g=>+g.target),V=sum(G,g=>goalSaved(g)),pc=T?Math.max(0,Math.min(100,V/T*100)):0;
+ const G=D.goal,T=sum(G,g=>+g.target),V=(A=>sum([...new Set(G.map(x=>x.akun))],n=>A[n]||0))(bal()),pc=T?Math.max(0,Math.min(100,V/T*100)):0;
  return `<div class="card ghero">${JAR}<div class="gh"><div class="two"><div><span>💚 Terkumpul</span><b class="in">${rp(V)}</b></div><div><span>🚩 Total target</span><b>${rp(T)}</b></div></div><div class="track"><i style="width:${pc}%"></i></div><div class="rowl"><span class="mut">${G.length?(pc>=100?'Semua target tercapai! 🎉':'Terus semangat, sedikit demi sedikit ✨'):'Mulai dengan target pertamamu ✨'}</span><span class="chip">${Math.round(pc)}%</span></div></div></div>`+
  (G.length?G.map(g=>{const sv=goalSaved(g),p=Math.max(0,Math.min(100,sv/(+g.target)*100));
   return `<div class="card goal"><button type="button" class="rowl tapr" onclick="goalDetail('${g.id}')"><span class="eic" style="background:${g.warna||PAL[2]}">${esc(g.ikon||'🎯')}</span><div class="ewhat"><b>${esc(g.nama)}</b><span>${adot(g.akun)}${esc(g.akun)}${g.tenggat?' · tenggat '+fd(g.tenggat):''}</span></div><span class="chip good">${Math.round(p)}%</span></button>
   <div class="track"><i style="width:${p}%;background:${g.warna||'#9DB8E0'}"></i></div><div class="rowl"><b>${rp(sv)}</b><span class="mut">dari ${rp(+g.target)}</span></div><div class="mut">${goalNeed(g,sv)}</div>
-  <div class="row g6"><button type="button" class="btn sm" onclick="goalMove('${g.id}','setor')">+ Setor</button><button type="button" class="btn g sm" onclick="goalMove('${g.id}','tarik')">Tarik</button><button type="button" class="btn g sm" onclick="goalForm('${g.id}')">Ubah</button></div></div>`}).join(''):empty('Belum ada target tabungan','Buat target, lalu setor dari akun mana saja.'))+
+  <div class="row g6"><button type="button" class="btn sm" onclick="goalMove('${g.id}','setor')">+ Setor</button><button type="button" class="btn g sm" onclick="goalMove('${g.id}','tarik')">Tarik</button><button type="button" class="btn g sm" onclick="goalForm('${g.id}')">Ubah</button></div></div>`}).join(''):empty('Belum ada target tabungan','Buat akun khusus tabungan di tab Akun, lalu hubungkan ke sebuah target.'))+
  `<button type="button" class="btn" onclick="goalForm('')">+ Target tabungan baru</button>`;
 }
 function goalForm(id){
  const g=D.goal.find(x=>x.id==id);
- const sav=D.akun.find(a=>a.grup=='Tabungan')||D.akun.find(a=>!isLiab(a)&&a.grup!='Kartu Debit')||D.akun[0]||{};
+ const free=D.akun.filter(a=>!isLiab(a)&&!isDebit(a)&&!D.goal.some(x=>x.id!=id&&x.akun==a.nama)),sav=free.find(a=>a.grup=='Tabungan')||free[0]||{};
  S.f=g?{id,nama:g.nama,target:+g.target,tenggat:g.tenggat||'',akun:g.akun,ikon:g.ikon||'🎯',warna:g.warna||PAL[2],catatan:g.catatan||''}:{id:'',nama:'',target:0,tenggat:'',akun:sav.nama||'',ikon:'🎯',warna:PAL[2],catatan:''};
  openS(()=>form(S.f.id?'Ubah target':'Target tabungan',
   `<div class="row2">${inp('ikon','Ikon','🎯','maxlength="4"')}${inp('nama','Nama target','Misal: Dana umrah')}</div>`+mon('target','Nominal target')+dat('tenggat','Tenggat (opsional)')+
-  F('Disimpan di akun',`<select onchange="S.f.akun=this.value">${opts(D.akun.filter(a=>!isLiab(a)&&a.grup!='Kartu Debit').map(a=>[a.nama,a.nama]),S.f.akun)}</select><div class="mut">Setoran = transfer dari akun lain ke akun ini, jadi saldo akun ikut bertambah.</div>`)+
+  F('Terhubung ke akun',free.length||S.f.akun?`<select onchange="S.f.akun=this.value">${opts(free.map(a=>[a.nama,a.nama]),S.f.akun)}</select><div class="mut">Saldo akun ini otomatis dihitung sebagai uang yang terkumpul untuk target ini. Satu akun untuk satu target.</div>`:'<div class="mut">Belum ada akun yang bisa dihubungkan. Buat akun khusus tabungan dulu di tab Akun.</div>')+
   swatches('warna')+inp('catatan','Catatan','Opsional')+btns('goalSave()',S.f.id&&'goalDel()')));
 }
 function goalSave(){
  const f=S.f;
  if(!f.nama.trim())return toast('Nama target wajib diisi',0);
  if(!(f.target>0))return toast('Nominal target wajib diisi',0);
- if(!f.akun)return toast('Pilih akun penyimpanan',0);
+ if(!f.akun)return toast('Pilih akun yang dihubungkan',0);
+ const dup=D.goal.find(x=>x.id!=f.id&&x.akun==f.akun);
+ if(dup)return toast('Akun ini sudah dipakai target “'+dup.nama+'”. Pilih akun lain.',0);
  op('upsert',['Tabungan',{id:f.id||uid(),nama:f.nama.trim(),target:f.target,tenggat:f.tenggat,akun:f.akun,ikon:f.ikon||'🎯',warna:f.warna,catatan:f.catatan}]);
  closeS();toast('Target tersimpan');
 }
@@ -908,10 +982,10 @@ async function goalDel(){
  if(await ask('Hapus target “'+S.f.nama+'”?','Riwayat setoran tetap ada sebagai transfer biasa.')){op('remove',['Tabungan',S.f.id]);closeS();toast('Target dihapus')}
 }
 function goalMove(gid,mode){
- const g=D.goal.find(x=>x.id==gid),o=D.akun.find(a=>a.nama!=g.akun&&!isLiab(a)&&a.grup!='Kartu Debit'&&!+a.sembunyi)||{};
+ const g=D.goal.find(x=>x.id==gid),o=D.akun.find(a=>a.nama!=g.akun&&!isLiab(a)&&!isDebit(a)&&!+a.sembunyi)||{};
  S.f={gid,mode,nilai:0,akun:o.nama||'',tgl:TODAY(),cat:''};
  openS(()=>form((mode=='setor'?'Setor ke ':'Tarik dari ')+esc(g.nama),
-  mon('nilai','Nominal')+F(mode=='setor'?'Dari akun':'Ke akun',`<select onchange="S.f.akun=this.value">${opts(D.akun.filter(a=>a.nama!=g.akun&&!isLiab(a)&&a.grup!='Kartu Debit').map(a=>[a.nama,a.nama]),S.f.akun)}</select>`)+dat('tgl','Tanggal')+inp('cat','Catatan','Opsional')+btns('goalMoveSave()',null,mode=='setor'?'Setor':'Tarik')));
+  mon('nilai','Nominal')+F(mode=='setor'?'Dari akun':'Ke akun',`<select onchange="S.f.akun=this.value">${opts(D.akun.filter(a=>a.nama!=g.akun&&!isLiab(a)&&!isDebit(a)).map(a=>[a.nama,a.nama]),S.f.akun)}</select>`)+dat('tgl','Tanggal')+inp('cat','Catatan','Opsional')+btns('goalMoveSave()',null,mode=='setor'?'Setor':'Tarik')));
 }
 function goalMoveSave(){
  const f=S.f,g=D.goal.find(x=>x.id==f.gid);
@@ -924,10 +998,10 @@ function goalMoveSave(){
 function goalDetail(id){
  const g=D.goal.find(x=>x.id==id);if(!g)return;
  openS(()=>{
-  const sv=goalSaved(g),p=Math.max(0,Math.min(100,sv/(+g.target)*100)),L=D.trf.filter(t=>t.goal==g.id).sort((a,b)=>b.tanggal.localeCompare(a.tanggal));
-  return SHEAD(esc(g.nama))+`<div class="sbody"><div class="card goal"><div class="rowl"><b class="big">${rp(sv)}</b><span class="chip good">${Math.round(p)}%</span></div><div class="track"><i style="width:${p}%;background:${g.warna||'#9DB8E0'}"></i></div><div class="mut">dari ${rp(+g.target)} · ${goalNeed(g,sv)}</div><div class="mut">Disimpan di ${adot(g.akun)}${esc(g.akun)}${g.catatan?' · '+esc(g.catatan):''}</div>
+  const sv=goalSaved(g),p=Math.max(0,Math.min(100,sv/(+g.target)*100)),L=entries().filter(e=>e.akun==g.akun||e.ke==g.akun).slice(0,40);
+  return SHEAD(esc(g.nama))+`<div class="sbody"><div class="card goal"><div class="rowl"><b class="big">${rp(sv)}</b><span class="chip good">${Math.round(p)}%</span></div><div class="track"><i style="width:${p}%;background:${g.warna||'#9DB8E0'}"></i></div><div class="mut">dari ${rp(+g.target)} · ${goalNeed(g,sv)}</div><div class="mut">Terhubung ke akun ${adot(g.akun)}${esc(g.akun)}${g.catatan?' · '+esc(g.catatan):''}</div>
   <div class="row g6"><button type="button" class="btn sm" onclick="closeS();goalMove('${g.id}','setor')">+ Setor</button><button type="button" class="btn g sm" onclick="closeS();goalMove('${g.id}','tarik')">Tarik</button><button type="button" class="btn g sm" onclick="closeS();goalForm('${g.id}')">Ubah</button></div></div>
-  <div class="card"><h3>Riwayat</h3>${L.length?`<ul class="ents">${L.map(t=>{const inn=t.ke==g.akun;return `<li class="ent" onclick="closeS();editEnt('${t.id}')"><span class="eic ${inn?'in':'out'}">${inn?'＋':'−'}</span><div class="ewhat"><b>${inn?'Setoran':'Penarikan'}</b><span>${fd(t.tanggal)} · ${esc(inn?t.dari:t.ke)}${t.catatan?' · '+esc(t.catatan):''}</span></div><span class="eamt ${inn?'in':'out'}">${inn?'+':'−'}${rp(+t.nilai)}</span></li>`}).join('')}</ul>`:'<div class="mut pad">Belum ada setoran.</div>'}</div></div>`;
+  <div class="card"><h3>Riwayat akun ${esc(g.akun)}</h3>${L.length?`<ul class="ents">${L.map(e=>entRow(e,g.akun).replace('onclick="editEnt(','onclick="closeS();editEnt(')).join('')}</ul>`:'<div class="mut pad">Belum ada transaksi di akun ini.</div>'}</div></div>`;
  });
 }
 
@@ -943,7 +1017,7 @@ function hutHtml(){
 }
 function hutForm(id){
  const h=D.hut.find(x=>x.id==id);
- S.f=h?{id,jenis:h.jenis,pihak:h.pihak,total:+h.total,sisa:+h.sisa,mulai:h.mulai||'',tempo:h.tempo||'',catatan:h.catatan||'',akun:'',catat:0}:{id:'',jenis:'Hutang',pihak:'',total:0,sisa:0,mulai:TODAY(),tempo:'',catatan:'',akun:(D.akun.find(a=>!isLiab(a)&&a.grup!='Kartu Debit')||{}).nama||'',catat:1};
+ S.f=h?{id,jenis:h.jenis,pihak:h.pihak,total:+h.total,sisa:+h.sisa,mulai:h.mulai||'',tempo:h.tempo||'',catatan:h.catatan||'',akun:'',catat:0}:{id:'',jenis:'Hutang',pihak:'',total:0,sisa:0,mulai:TODAY(),tempo:'',catatan:'',akun:(D.akun.find(a=>!isLiab(a)&&!isDebit(a))||{}).nama||'',catat:1};
  openS(hSheet);
 }
 const hSheet=()=>{const f=S.f,pt=f.jenis=='Piutang';
@@ -951,7 +1025,7 @@ const hSheet=()=>{const f=S.f,pt=f.jenis=='Piutang';
   seg([[f.jenis=='Hutang',"S.f.jenis='Hutang';sh()",'Hutang saya'],[f.jenis=='Piutang',"S.f.jenis='Piutang';sh()",'Piutang','inc']])+
   inp('pihak',pt?'Yang berutang kepadamu':'Berutang kepada','Nama orang / lembaga')+mon('total','Total pinjaman')+(f.id?mon('sisa','Sisa yang belum dibayar'):'')+
   dat('mulai','Tanggal pinjaman')+dat('tempo','Jatuh tempo (opsional)')+inp('catatan','Catatan','Opsional')+
-  (f.id?'':F(pt?'Uang keluar dari akun':'Uang masuk ke akun',`<select onchange="S.f.catat=this.value?1:0;S.f.akun=this.value">${opts([['','Jangan catat ke akun'],...D.akun.filter(a=>!isLiab(a)&&a.grup!='Kartu Debit').map(a=>[a.nama,a.nama])],f.catat?f.akun:'')}</select><div class="mut">${pt?'Dicatat sebagai pengeluaran':'Dicatat sebagai pemasukan'} kategori Pinjaman agar saldo akun sesuai.</div>`))+
+  (f.id?'':F(pt?'Uang keluar dari akun':'Uang masuk ke akun',`<select onchange="S.f.catat=this.value?1:0;S.f.akun=this.value">${opts([['','Jangan catat ke akun'],...D.akun.filter(a=>!isLiab(a)&&!isDebit(a)).map(a=>[a.nama,a.nama])],f.catat?f.akun:'')}</select><div class="mut">${pt?'Dicatat sebagai pengeluaran':'Dicatat sebagai pemasukan'} kategori Pinjaman agar saldo akun sesuai.</div>`))+
   btns('hutSave()',f.id&&'hutDel()'))};
 function hutSave(){
  const f=S.f;
@@ -965,8 +1039,8 @@ function hutSave(){
 async function hutDel(){if(await ask('Hapus catatan ini?','Transaksi pembayaran yang sudah tercatat tetap ada di spreadsheet.')){op('remove',['Hutang',S.f.id]);closeS();toast('Dihapus')}}
 function hutPay(id){
  const h=D.hut.find(x=>x.id==id),pt=h.jenis=='Piutang';
- S.f={id,nilai:+h.sisa,akun:h.akun||(D.akun.find(a=>!isLiab(a)&&a.grup!='Kartu Debit')||{}).nama||'',tgl:TODAY()};
- openS(()=>form((pt?'Terima dari ':'Bayar ke ')+esc(h.pihak),mon('nilai','Nominal')+F(pt?'Masuk ke akun':'Dibayar dari akun',`<select onchange="S.f.akun=this.value">${opts(D.akun.filter(a=>!isLiab(a)&&a.grup!='Kartu Debit').map(a=>[a.nama,a.nama]),S.f.akun)}</select>`)+dat('tgl','Tanggal')+`<div class="mut">Sisa ${rp(+h.sisa)} · dicatat otomatis sebagai ${pt?'pemasukan':'pengeluaran'} kategori Pinjaman.</div>`+btns('hutPaySave()',null,pt?'Terima':'Bayar')));
+ S.f={id,nilai:+h.sisa,akun:h.akun||(D.akun.find(a=>!isLiab(a)&&!isDebit(a))||{}).nama||'',tgl:TODAY()};
+ openS(()=>form((pt?'Terima dari ':'Bayar ke ')+esc(h.pihak),mon('nilai','Nominal')+F(pt?'Masuk ke akun':'Dibayar dari akun',`<select onchange="S.f.akun=this.value">${opts(D.akun.filter(a=>!isLiab(a)&&!isDebit(a)).map(a=>[a.nama,a.nama]),S.f.akun)}</select>`)+dat('tgl','Tanggal')+`<div class="mut">Sisa ${rp(+h.sisa)} · dicatat otomatis sebagai ${pt?'pemasukan':'pengeluaran'} kategori Pinjaman.</div>`+btns('hutPaySave()',null,pt?'Terima':'Bayar')));
 }
 function hutPaySave(){
  const f=S.f,h=D.hut.find(x=>x.id==f.id),pt=h.jenis=='Piutang';
